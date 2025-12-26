@@ -20,7 +20,6 @@ function computeRSI(closes: number[], length: number): (number | null)[] {
   let gain = 0;
   let loss = 0;
 
-  // initial average gain/loss
   for (let i = 1; i <= length; i++) {
     const diff = closes[i] - closes[i - 1];
     if (diff >= 0) gain += diff;
@@ -33,7 +32,6 @@ function computeRSI(closes: number[], length: number): (number | null)[] {
   let rs = loss === 0 ? Infinity : gain / loss;
   rsi[length] = 100 - 100 / (1 + rs);
 
-  // Wilder smoothing
   for (let i = length + 1; i < closes.length; i++) {
     const diff = closes[i] - closes[i - 1];
     const g = diff > 0 ? diff : 0;
@@ -71,6 +69,33 @@ function intervalToBinance(tf: string): string {
   return map[x] || "1h";
 }
 
+function intervalToCryptoCompare(tf: string): { endpoint: "histominute" | "histohour" | "histoday"; aggregate: number } {
+  const s = (tf || "").trim().toLowerCase();
+  let m = s.match(/^(\d+)\s*m$/);
+  if (m) return { endpoint: "histominute", aggregate: Math.max(1, Math.min(1440, parseInt(m[1], 10))) };
+
+  m = s.match(/^(\d+)\s*h$/);
+  if (m) return { endpoint: "histohour", aggregate: Math.max(1, Math.min(168, parseInt(m[1], 10))) };
+
+  m = s.match(/^(\d+)\s*d$/);
+  if (m) return { endpoint: "histoday", aggregate: Math.max(1, Math.min(365, parseInt(m[1], 10))) };
+
+  // fallback
+  return { endpoint: "histohour", aggregate: 1 };
+}
+
+function parseSymbol(symbol: string): { base: string; quote: string } {
+  const s = symbol.toUpperCase().replace("-", "").replace("/", "");
+  const quotes = ["USDT", "USDC", "BUSD", "USD", "EUR", "BTC", "ETH"];
+  for (const q of quotes.sort((a, b) => b.length - a.length)) {
+    if (s.endsWith(q) && s.length > q.length) {
+      return { base: s.slice(0, -q.length), quote: q };
+    }
+  }
+  // fallback raisonnable
+  return { base: s, quote: "USDT" };
+}
+
 function safeOp(op: string): "<" | "<=" | ">" | ">=" | "==" | "!=" {
   const o = (op || "").trim();
   if (o === "<" || o === "<=" || o === ">" || o === ">=" || o === "==" || o === "!=") return o;
@@ -99,6 +124,81 @@ function maxDrawdown(equity: number[]): number {
   return mdd;
 }
 
+async function fetchBarsFromBinance(symbol: string, timeframe: string, barsLimit: number): Promise<{ bars: Bar[]; interval: string }> {
+  const interval = intervalToBinance(timeframe);
+  const url =
+    "https://api.binance.com/api/v3/klines?symbol=" +
+    encodeURIComponent(symbol) +
+    "&interval=" +
+    encodeURIComponent(interval) +
+    "&limit=" +
+    encodeURIComponent(String(barsLimit));
+
+  const r = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      // certains providers bloquent sans UA
+      "User-Agent": "StratForge/1.0"
+    }
+  });
+
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error("Binance fetch failed: " + r.status + (text ? " " + text.slice(0, 120) : ""));
+  }
+
+  const raw = await r.json();
+  if (!Array.isArray(raw) || raw.length < 50) throw new Error("Binance returned not enough data.");
+
+  const bars: Bar[] = raw.map((k: any[]) => ({
+    t: toNumber(k[0]),
+    o: toNumber(k[1]),
+    h: toNumber(k[2]),
+    l: toNumber(k[3]),
+    c: toNumber(k[4])
+  }));
+
+  return { bars, interval };
+}
+
+async function fetchBarsFromCryptoCompare(symbol: string, timeframe: string, barsLimit: number): Promise<{ bars: Bar[]; interval: string }> {
+  const { base, quote } = parseSymbol(symbol);
+  const { endpoint, aggregate } = intervalToCryptoCompare(timeframe);
+
+  const url =
+    "https://min-api.cryptocompare.com/data/v2/" +
+    endpoint +
+    "?fsym=" +
+    encodeURIComponent(base) +
+    "&tsym=" +
+    encodeURIComponent(quote) +
+    "&limit=" +
+    encodeURIComponent(String(barsLimit)) +
+    "&aggregate=" +
+    encodeURIComponent(String(aggregate));
+
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error("CryptoCompare fetch failed: " + r.status + (text ? " " + text.slice(0, 120) : ""));
+  }
+
+  const j = await r.json();
+  const arr = j?.Data?.Data;
+  if (!Array.isArray(arr) || arr.length < 50) throw new Error("CryptoCompare returned not enough data.");
+
+  const bars: Bar[] = arr.map((b: any) => ({
+    t: toNumber(b.time) * 1000,
+    o: toNumber(b.open),
+    h: toNumber(b.high),
+    l: toNumber(b.low),
+    c: toNumber(b.close)
+  }));
+
+  const interval = endpoint === "histominute" ? aggregate + "m" : endpoint === "histohour" ? aggregate + "h" : aggregate + "d";
+  return { bars, interval };
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -114,33 +214,23 @@ export async function POST(req: Request) {
       return Response.json({ error: "Missing definition (JSON) in request body." }, { status: 400 });
     }
 
-    // --- fetch klines (Binance Spot public) ---
-    const interval = intervalToBinance(timeframe);
-    const url =
-      "https://api.binance.com/api/v3/klines?symbol=" +
-      encodeURIComponent(symbol) +
-      "&interval=" +
-      encodeURIComponent(interval) +
-      "&limit=" +
-      encodeURIComponent(String(barsLimit));
+    // --- fetch bars: Binance first, fallback CryptoCompare ---
+    let provider = "binance";
+    let interval = intervalToBinance(timeframe);
+    let bars: Bar[] = [];
 
-    const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) {
-      return Response.json({ error: "Binance fetch failed: " + r.status + " " + r.statusText }, { status: 502 });
+    try {
+      const out = await fetchBarsFromBinance(symbol, timeframe, barsLimit);
+      bars = out.bars;
+      interval = out.interval;
+      provider = "binance";
+    } catch (e: any) {
+      // typiquement 451 sur Vercel => fallback
+      const out2 = await fetchBarsFromCryptoCompare(symbol, timeframe, barsLimit);
+      bars = out2.bars;
+      interval = out2.interval;
+      provider = "cryptocompare";
     }
-
-    const raw = await r.json();
-    if (!Array.isArray(raw) || raw.length < 50) {
-      return Response.json({ error: "Not enough data returned by Binance." }, { status: 502 });
-    }
-
-    const bars: Bar[] = raw.map((k: any[]) => ({
-      t: toNumber(k[0]),
-      o: toNumber(k[1]),
-      h: toNumber(k[2]),
-      l: toNumber(k[3]),
-      c: toNumber(k[4])
-    }));
 
     const closes = bars.map((b) => b.c);
 
@@ -148,7 +238,6 @@ export async function POST(req: Request) {
     const entryRules = (definition.rules && definition.rules.entry && definition.rules.entry.all) || [];
     const exitRules = (definition.rules && definition.rules.exit && definition.rules.exit.any) || [];
 
-    // Determine RSI length from first RSI rule (default 14)
     let rsiLen = 14;
     for (const rr of [...entryRules, ...exitRules]) {
       if (rr && rr.type === "indicator" && String(rr.name || "").toUpperCase() === "RSI") {
@@ -216,7 +305,6 @@ export async function POST(req: Request) {
 
     const equity: number[] = [];
     const equityT: number[] = [];
-
     const trades: any[] = [];
 
     const startIndex = Math.max(rsiLen + 2, 10);
@@ -224,7 +312,6 @@ export async function POST(req: Request) {
     for (let i = 0; i < bars.length; i++) {
       const b = bars[i];
 
-      // mark-to-market
       const m2m = cash + qty * b.c;
       equity.push(m2m);
       equityT.push(b.t);
@@ -232,7 +319,6 @@ export async function POST(req: Request) {
       if (i < startIndex) continue;
 
       if (qty <= 0) {
-        // flat -> check entry at close
         if (entryOK(i)) {
           const spend = fixedQuoteAmount;
           if (spend > cash) continue;
@@ -240,7 +326,6 @@ export async function POST(req: Request) {
           const px = b.c * (1 + slipRate);
           const q = spend / px;
 
-          // fee on buy reduces cash
           const fee = spend * feeRate;
           cash = cash - spend - fee;
 
@@ -249,7 +334,6 @@ export async function POST(req: Request) {
           entryTime = b.t;
         }
       } else {
-        // in position -> stop/tp using bar high/low
         const stopPx = slPercent > 0 ? entryPrice * (1 - slPercent / 100) : 0;
         const takePx = tpPercent > 0 ? entryPrice * (1 + tpPercent / 100) : 0;
 
@@ -257,7 +341,6 @@ export async function POST(req: Request) {
         let exitPx = b.c * (1 - slipRate);
         let reason = "signal";
 
-        // Conservative ordering: stop first, then take profit, then signal exit
         if (slPercent > 0 && b.l <= stopPx) {
           exit = true;
           exitPx = stopPx * (1 - slipRate);
@@ -320,6 +403,7 @@ export async function POST(req: Request) {
     const mdd = maxDrawdown(equity);
 
     return Response.json({
+      dataProvider: provider,
       symbol,
       timeframe: interval,
       initialCapital,
