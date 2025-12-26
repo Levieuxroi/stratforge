@@ -112,13 +112,15 @@ export default function ForwardClient() {
 
   const [strat, setStrat] = useState<StrategyRow | null>(null);
   const [signals, setSignals] = useState<SignalRow[]>([]);
-  const [status, setStatus] = useState<"stopped" | "running">("stopped");
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [provider, setProvider] = useState<string>("");
 
+  const [enabled, setEnabled] = useState(false);
+  const [freq, setFreq] = useState(300);
+
   const timerRef = useRef<any>(null);
-  const lastSignalRef = useRef<string>(""); // to avoid duplicates client-side
+  const lastSignalRef = useRef<string>("");
 
   async function requireSession() {
     const { data } = await supabase.auth.getSession();
@@ -172,10 +174,52 @@ export default function ForwardClient() {
     if (!error) setSignals((data ?? []) as any);
   }
 
-  async function tickOnce() {
+  async function loadForwardConfig() {
+    const session = await requireSession();
+    if (!session || !id) return;
+
+    const { data, error } = await supabase
+      .from("forward_configs")
+      .select("is_enabled,frequency_seconds")
+      .eq("strategy_id", id)
+      .limit(1);
+
+    if (!error && data && data.length) {
+      setEnabled(!!data[0].is_enabled);
+      setFreq(Number(data[0].frequency_seconds || 300));
+    } else {
+      setEnabled(false);
+      setFreq(300);
+    }
+  }
+
+  async function setForwardConfig(isEnabled: boolean) {
+    setErr(null);
+    const session = await requireSession();
+    if (!session || !strat) return;
+
+    const up = await supabase.from("forward_configs").upsert(
+      {
+        user_id: session.user.id,
+        strategy_id: strat.id,
+        is_enabled: isEnabled,
+        frequency_seconds: freq,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "strategy_id" }
+    );
+
+    if (up.error) {
+      setErr(up.error.message);
+      return;
+    }
+
+    setEnabled(isEnabled);
+  }
+
+  async function tickOnceLocal() {
     if (!strat) return;
 
-    // 1) fetch bars
     const r = await fetch("/api/market/bars", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -192,18 +236,14 @@ export default function ForwardClient() {
 
     const closes = bars.map((b) => b.c);
 
-    // 2) compute RSI + rules
     const { len, entryOp, entryVal, exitOp, exitVal } = getRSIRules(strat.definition);
     const rsi = computeRSI(closes, len);
 
     const lastIdx = bars.length - 1;
     const lastBar = bars[lastIdx];
     const lastRSI = rsi[lastIdx];
-
     if (lastRSI === null) return;
 
-    // 3) decide signal (V1: long-only, use last stored signal state)
-    // last signal in DB determines if we are "in position"
     const { data: lastSig } = await supabase
       .from("signals")
       .select("signal_type")
@@ -222,12 +262,10 @@ export default function ForwardClient() {
 
     if (!newSignal) return;
 
-    // anti-duplicate key client-side: strategyId + barTime + signalType
     const key = strat.id + "|" + String(lastBar.t) + "|" + newSignal;
     if (lastSignalRef.current === key) return;
     lastSignalRef.current = key;
 
-    // 4) insert signal (RLS ensures only own)
     const session = await requireSession();
     if (!session) return;
 
@@ -237,33 +275,25 @@ export default function ForwardClient() {
       t: new Date(lastBar.t).toISOString(),
       signal_type: newSignal,
       price: lastBar.c,
-      meta: { provider, rsi: lastRSI, timeframe: strat.timeframe }
+      meta: { provider: String(j.provider || ""), rsi: lastRSI, timeframe: strat.timeframe, mode: "local" }
     });
 
     if (ins.error) {
-      // unique constraint may block duplicates: ok
-      if (!String(ins.error.message || "").toLowerCase().includes("duplicate")) {
-        throw new Error(ins.error.message);
-      }
+      const msg = String(ins.error.message || "").toLowerCase();
+      if (!msg.includes("duplicate")) throw new Error(ins.error.message);
     }
 
     await loadSignals();
   }
 
-  function start() {
+  function startLocalLoop() {
     if (timerRef.current) return;
-    setStatus("running");
-
-    // tick immediately then every 60s
-    tickOnce().catch((e) => setErr(String(e?.message || e)));
-
     timerRef.current = setInterval(() => {
-      tickOnce().catch((e) => setErr(String(e?.message || e)));
+      tickOnceLocal().catch((e) => setErr(String(e?.message || e)));
     }, 60000);
   }
 
-  function stop() {
-    setStatus("stopped");
+  function stopLocalLoop() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -273,11 +303,12 @@ export default function ForwardClient() {
   useEffect(() => {
     loadStrategy();
     loadSignals();
+    loadForwardConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
-    return () => stop();
+    return () => stopLocalLoop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -288,50 +319,79 @@ export default function ForwardClient() {
           <div>
             <h1 className="text-2xl font-bold">Forward testing (V1)</h1>
             <div className="text-sm text-gray-600">{strat ? strat.name : ""}</div>
-            {provider ? <div className="text-xs text-gray-600">Data provider: {provider}</div> : null}
+            {provider ? <div className="text-xs text-gray-600">Data provider (local fetch): {provider}</div> : null}
+            <div className="text-xs text-gray-600">Server forward: {enabled ? "ON ✅" : "OFF"}</div>
           </div>
+
           <div className="flex gap-2">
-            {status === "running" ? (
-              <button className="rounded-md border px-4 py-2" onClick={stop}>Stop</button>
+            {enabled ? (
+              <button className="rounded-md border px-4 py-2" onClick={() => setForwardConfig(false)}>
+                Stop server
+              </button>
             ) : (
-              <button className="rounded-md bg-black px-4 py-2 text-white" onClick={start} disabled={busy || !!err}>
-                Start
+              <button className="rounded-md bg-black px-4 py-2 text-white" onClick={() => setForwardConfig(true)}>
+                Start server
               </button>
             )}
-            <button className="rounded-md border px-4 py-2" onClick={loadSignals}>Refresh</button>
-            <a className="rounded-md border px-4 py-2" href="/dashboard">Retour</a>
+
+            <button className="rounded-md border px-4 py-2" onClick={() => tickOnceLocal().catch((e) => setErr(String(e?.message || e)))}>
+              Run now
+            </button>
+
+            <button className="rounded-md border px-4 py-2" onClick={loadSignals}>
+              Refresh
+            </button>
+
+            <a className="rounded-md border px-4 py-2" href="/dashboard">
+              Retour
+            </a>
           </div>
         </div>
 
         {err && <div className="rounded-md border p-3 text-sm text-red-600">Erreur: {err}</div>}
 
-        {busy ? (
-          <div className="text-sm text-gray-600">Chargement...</div>
-        ) : (
-          <div className="rounded-md border">
-            <div className="border-b p-3 text-sm font-semibold">Derniers signaux (max 50)</div>
-            {signals.length === 0 ? (
-              <div className="p-3 text-sm text-gray-600">Aucun signal enregistré.</div>
-            ) : (
-              <div className="divide-y">
-                {signals.map((s) => (
-                  <div key={s.id} className="p-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{s.signal_type}</div>
-                      <div className="text-sm text-gray-600">{new Date(s.t).toLocaleString()}</div>
-                    </div>
-                    <div className="text-sm">
-                      {s.price !== null ? Number(s.price).toFixed(2) : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="rounded-md border p-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-gray-700">
+              Fréquence server (sec)
+              <div className="text-xs text-gray-600">Recommandé: 300 (5 min)</div>
+            </div>
+            <input
+              className="w-28 rounded-md border px-3 py-2"
+              type="number"
+              value={freq}
+              min={60}
+              max={3600}
+              onChange={(e) => setFreq(Number(e.target.value))}
+            />
           </div>
-        )}
+          <div className="text-xs text-gray-600 mt-2">
+            Après modification de fréquence, clique Start server (ou Stop/Start) pour enregistrer.
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <div className="border-b p-3 text-sm font-semibold">Derniers signaux (max 50)</div>
+          {signals.length === 0 ? (
+            <div className="p-3 text-sm text-gray-600">Aucun signal enregistré.</div>
+          ) : (
+            <div className="divide-y">
+              {signals.map((s) => (
+                <div key={s.id} className="p-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">{s.signal_type}</div>
+                    <div className="text-sm text-gray-600">{new Date(s.t).toLocaleString()}</div>
+                  </div>
+                  <div className="text-sm">{s.price !== null ? Number(s.price).toFixed(2) : ""}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="text-xs text-gray-600">
-          Note: V1 fait un check toutes les 60s. En production, on mettra ça côté serveur (cron) pour que ça tourne même si tu fermes le navigateur.
+          “Run now” force un check immédiat (utile pour voir si ta stratégie déclenche quelque chose).
+          Le “Start server” permet à Vercel Cron de faire tourner ça même navigateur fermé.
         </div>
       </div>
     </main>
