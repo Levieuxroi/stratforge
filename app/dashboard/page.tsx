@@ -110,6 +110,13 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       className="rounded-md border px-3 py-2 text-sm cursor-pointer pointer-events-auto"
+                      onClick={() => router.push("/export?id=" + s.id)}
+                    >
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-2 text-sm cursor-pointer pointer-events-auto"
                       onClick={() => router.push("/builder?id=" + s.id)}
                     >
                       Éditer
