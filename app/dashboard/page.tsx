@@ -61,11 +61,19 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold">Dashboard</h1>
             <div className="text-sm text-gray-600">Connecté: {email || "..."}</div>
           </div>
-          <div className="flex gap-2">
-            <a className="rounded-md bg-black px-4 py-2 text-white" href="/builder">
+          <div className="flex gap-2 pointer-events-auto">
+            <button
+              type="button"
+              className="rounded-md bg-black px-4 py-2 text-white cursor-pointer pointer-events-auto"
+              onClick={() => router.push("/builder")}
+            >
               + Nouvelle stratégie
-            </a>
-            <button className="rounded-md border px-4 py-2" onClick={logout}>
+            </button>
+            <button
+              type="button"
+              className="rounded-md border px-4 py-2 cursor-pointer pointer-events-auto"
+              onClick={logout}
+            >
               Déconnexion
             </button>
           </div>
@@ -90,13 +98,22 @@ export default function DashboardPage() {
                       {s.symbol} • {s.timeframe}
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <a className="rounded-md border px-3 py-2 text-sm" href={"/backtest?id=" + s.id}>
+
+                  <div className="flex gap-2 pointer-events-auto">
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-2 text-sm cursor-pointer pointer-events-auto"
+                      onClick={() => router.push("/backtest?id=" + s.id)}
+                    >
                       Backtest
-                    </a>
-                    <a className="rounded-md border px-3 py-2 text-sm" href={"/builder?id=" + s.id}>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-2 text-sm cursor-pointer pointer-events-auto"
+                      onClick={() => router.push("/builder?id=" + s.id)}
+                    >
                       Éditer
-                    </a>
+                    </button>
                   </div>
                 </div>
               ))}
