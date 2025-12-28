@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
     const { data: cfg, error: cErr } = await supabaseAdmin
       .from("forward_configs")
-      .select("enabled,schedule,updated_at")
+      .select("enabled,schedule,interval_minutes,strategy_id,last_run_at,last_error,updated_at")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -37,6 +37,10 @@ export async function POST(req: Request) {
       forward: {
         enabled: !!(cfg as any)?.enabled,
         schedule: (cfg as any)?.schedule || "",
+        interval_minutes: Number((cfg as any)?.interval_minutes || 5),
+        strategy_id: (cfg as any)?.strategy_id || null,
+        last_run_at: (cfg as any)?.last_run_at || null,
+        last_error: (cfg as any)?.last_error || null,
         updated_at: (cfg as any)?.updated_at || null
       }
     });
