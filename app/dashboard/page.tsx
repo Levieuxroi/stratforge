@@ -1,4 +1,6 @@
-﻿"use client";
+"use client";
+
+import DashboardHeader from "../_components/DashboardHeader";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -55,6 +57,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen p-8">
+<div data-sf-dashboard-header="1"><DashboardHeader /></div>
 <div data-sf-upgrade-toolbar="1" className="mt-4 flex flex-wrap gap-2">
   <a href="/pricing" className="rounded-md border px-4 py-2">Upgrade</a>
   <a href="/forward" className="rounded-md border px-4 py-2">Forward</a>
@@ -64,7 +67,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Dashboard</h1>
-            <div className="text-sm text-gray-600">Connecté: {email || "..."}</div>
+            <div className="text-sm text-gray-600">Connect�f©: {email || "..."}</div>
           </div>
           <div className="flex gap-2 pointer-events-auto">
             <button
@@ -72,27 +75,27 @@ export default function DashboardPage() {
               className="rounded-md bg-black px-4 py-2 text-white cursor-pointer pointer-events-auto"
               onClick={() => router.push("/builder")}
             >
-              + Nouvelle stratégie
+              + Nouvelle strat�f©gie
             </button>
             <button
               type="button"
               className="rounded-md border px-4 py-2 cursor-pointer pointer-events-auto"
               onClick={logout}
             >
-              Déconnexion
+              D�f©connexion
             </button>
           </div>
         </div>
 
         <div className="rounded-md border">
-          <div className="border-b p-3 text-sm font-semibold">Mes stratégies</div>
+          <div className="border-b p-3 text-sm font-semibold">Mes strat�f©gies</div>
 
           {busy ? (
             <div className="p-3 text-sm text-gray-600">Chargement...</div>
           ) : err ? (
             <div className="p-3 text-sm text-red-600">Erreur: {err}</div>
           ) : rows.length === 0 ? (
-            <div className="p-3 text-sm text-gray-600">Aucune stratégie. Crée ta première stratégie.</div>
+            <div className="p-3 text-sm text-gray-600">Aucune strat�f©gie. Cr�f©e ta premi�f¨re strat�f©gie.</div>
           ) : (
             <div className="divide-y">
               {rows.map((s) => (
@@ -100,7 +103,7 @@ export default function DashboardPage() {
                   <div>
                     <div className="font-medium">{s.name}</div>
                     <div className="text-sm text-gray-600">
-                      {s.symbol} • {s.timeframe}
+                      {s.symbol} â�,�¢ {s.timeframe}
                     </div>
                   </div>
 
@@ -115,7 +118,7 @@ export default function DashboardPage() {
                       Export
                     </button>
                     <button className="rounded-md border px-3 py-2 text-sm" onClick={() => router.push("/builder?id=" + s.id)}>
-                      Éditer
+                      �f�?�diter
                     </button>
                   </div>
                 </div>
@@ -125,7 +128,7 @@ export default function DashboardPage() {
         </div>
 
         <a className="text-sm underline" href="/">
-          ← Retour
+          â�?� Retour
         </a>
       </div>
     </main>
