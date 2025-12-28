@@ -55,6 +55,10 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen p-8">
+<div data-sf-upgrade-toolbar="1" className="mt-4 flex flex-wrap gap-2">
+  <a href="/pricing" className="rounded-md border px-4 py-2">Upgrade</a>
+  <a href="/forward" className="rounded-md border px-4 py-2">Forward</a>
+</div>
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -126,3 +130,4 @@ export default function DashboardPage() {
     </main>
   );
 }
+
