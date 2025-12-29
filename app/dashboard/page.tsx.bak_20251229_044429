@@ -57,97 +57,64 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen p-8">
-      <div data-sf-dashboard-header="1">
-        <DashboardHeader />
-      </div>
-
-      <div data-sf-upgrade-toolbar="1" className="mt-4 flex flex-wrap gap-2">
-        <a href="/pricing" className="rounded-md border px-4 py-2">Upgrade</a>
-        <a href="/forward" className="rounded-md border px-4 py-2">Forward</a>
-        <a href="/signals" className="rounded-md border px-4 py-2">Signals</a>
-      </div>
-
+<div data-sf-dashboard-header="1"><DashboardHeader /></div>
+<div data-sf-upgrade-toolbar="1" className="mt-4 flex flex-wrap gap-2">
+  <a href="/pricing" className="rounded-md border px-4 py-2">Upgrade</a>
+  <a href="/forward" className="rounded-md border px-4 py-2">Forward</a>
+  <a href="/signals" className="rounded-md border px-4 py-2">Signals</a>
+</div>
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Dashboard</h1>
-            <div className="text-sm text-gray-600">
-              {"Connect\u00E9:"} {email || "..."}
-            </div>
+            <div className="text-sm text-gray-600">Connecte: {email || "..."}</div>
           </div>
-
           <div className="flex gap-2 pointer-events-auto">
             <button
               type="button"
               className="rounded-md bg-black px-4 py-2 text-white cursor-pointer pointer-events-auto"
               onClick={() => router.push("/builder")}
             >
-              {"+ Nouvelle strat\u00E9gie"}
-            </button>
-
+              + Nouvelle strategie</button>
             <button
               type="button"
               className="rounded-md border px-4 py-2 cursor-pointer pointer-events-auto"
               onClick={logout}
             >
-              {"D\u00E9connexion"}
+              Deconnexion
             </button>
           </div>
         </div>
 
         <div className="rounded-md border">
-          <div className="border-b p-3 text-sm font-semibold">
-            {"Mes strat\u00E9gies"}
-          </div>
+          <div className="border-b p-3 text-sm font-semibold">Mes strategies</div>
 
           {busy ? (
-            <div className="p-3 text-sm text-gray-600">{"Chargement..."}</div>
+            <div className="p-3 text-sm text-gray-600">Chargement...</div>
           ) : err ? (
-            <div className="p-3 text-sm text-red-600">{"Erreur: "} {err}</div>
+            <div className="p-3 text-sm text-red-600">Erreur: {err}</div>
           ) : rows.length === 0 ? (
-            <div className="p-3 text-sm text-gray-600">
-              {"Aucune strat\u00E9gie. Cr\u00E9e ta premi\u00E8re strat\u00E9gie."}
-            </div>
+            <div className="p-3 text-sm text-gray-600">Aucune strategie. Cree ta premiere strategie.</div>
           ) : (
             <div className="divide-y">
               {rows.map((s) => (
                 <div key={s.id} className="p-3 flex items-center justify-between">
                   <div>
                     <div className="font-medium">{s.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {s.symbol} {"\u2022"} {s.timeframe}
-                    </div>
+                    <div className="text-sm text-gray-600">{s.symbol} - {s.timeframe}</div>
                   </div>
 
                   <div className="flex gap-2 pointer-events-auto">
-                    <button
-                      className="rounded-md border px-3 py-2 text-sm cursor-pointer"
-                      onClick={() => router.push("/backtest?id=" + s.id)}
-                      type="button"
-                    >
+                    <button className="rounded-md border px-3 py-2 text-sm" onClick={() => router.push("/backtest?id=" + s.id)}>
                       Backtest
                     </button>
-                    <button
-                      className="rounded-md border px-3 py-2 text-sm cursor-pointer"
-                      onClick={() => router.push("/forward?id=" + s.id)}
-                      type="button"
-                    >
+                    <button className="rounded-md border px-3 py-2 text-sm" onClick={() => router.push("/forward?id=" + s.id)}>
                       Forward
                     </button>
-                    <button
-                      className="rounded-md border px-3 py-2 text-sm cursor-pointer"
-                      onClick={() => router.push("/export?id=" + s.id)}
-                      type="button"
-                    >
+                    <button className="rounded-md border px-3 py-2 text-sm" onClick={() => router.push("/export?id=" + s.id)}>
                       Export
                     </button>
-                    <button
-                      className="rounded-md border px-3 py-2 text-sm cursor-pointer"
-                      onClick={() => router.push("/builder?id=" + s.id)}
-                      type="button"
-                    >
-                      {"\u00C9diter"}
-                    </button>
+                    <button className="rounded-md border px-3 py-2 text-sm" onClick={() =>Editer</button>
                   </div>
                 </div>
               ))}
@@ -155,10 +122,10 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <a className="text-sm underline" href="/">
-          {"\u2190 Retour"}
-        </a>
+        <a className="text-sm underline" href="/"><- Retour</a>
       </div>
     </main>
   );
 }
+
+

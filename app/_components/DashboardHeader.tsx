@@ -20,7 +20,8 @@ export default function DashboardHeader() {
         .eq("id", session.user.id)
         .maybeSingle();
 
-      setPlan((prof?.plan || "free") as Plan);
+      const p = (prof?.plan || "free") as Plan;
+      setPlan(p);
     })();
   }, []);
 

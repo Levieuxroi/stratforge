@@ -1,10 +1,31 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function WriteUtf8NoBom([string]$path, [string]$content) {
+  $dir = Split-Path $path -Parent
+  if ($dir -and !(Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  [System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# Detect APPROOT
+$APPROOT = ""
+if (Test-Path ".\src\app") { $APPROOT = ".\src\app" }
+elseif (Test-Path ".\app") { $APPROOT = ".\app" }
+else { throw "ERROR: neither .\src\app nor .\app found." }
+
+# supabaseClient import path depends on app root
+$supabaseImport = if ($APPROOT -eq ".\src\app") { "../../../lib/supabaseClient" } else { "../../lib/supabaseClient" }
+
+$dashPath = Join-Path $APPROOT "dashboard\page.tsx"
+
+$dash = @"
 "use client";
 
 import DashboardHeader from "../_components/DashboardHeader";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "$supabaseImport";
 
 type StrategyRow = {
   id: string;
@@ -162,3 +183,8 @@ export default function DashboardPage() {
     </main>
   );
 }
+"@
+
+WriteUtf8NoBom $dashPath $dash
+
+Write-Host "OK: dashboard/page.tsx rewritten with unicode escapes (no mojibake)." -ForegroundColor Green
