@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "../../lib/supabase/browser";
@@ -33,7 +35,7 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (!data.session) {
-          setMsg("Compte crÃ©Ã©. VÃ©rifie ton email si la confirmation est activÃ©e, puis reconnecte-toi.");
+          setMsg("Compte crÃƒÂ©ÃƒÂ©. VÃƒÂ©rifie ton email si la confirmation est activÃƒÂ©e, puis reconnecte-toi.");
         } else {
           router.push(next);
           router.refresh();
@@ -87,7 +89,7 @@ export default function LoginPage() {
             <input
               type="password"
               className="w-full rounded-md border px-3 py-2"
-              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+              placeholder="Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢Ã¢â‚¬Â¢"
               required
               minLength={6}
               value={password}
@@ -98,12 +100,12 @@ export default function LoginPage() {
           {msg ? <div className="text-sm text-red-600">{msg}</div> : null}
 
           <button className="w-full rounded-md bg-black px-4 py-2 text-white disabled:opacity-50" disabled={loading}>
-            {loading ? "..." : mode === "login" ? "Se connecter" : "CrÃ©er le compte"}
+            {loading ? "..." : mode === "login" ? "Se connecter" : "CrÃƒÂ©er le compte"}
           </button>
         </form>
 
         <a className="text-sm underline" href="/">
-          â† Retour
+          Ã¢â€ Â Retour
         </a>
       </div>
     </main>
