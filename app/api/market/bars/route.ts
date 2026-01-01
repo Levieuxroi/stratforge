@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const preferredRegion = ["fra1"]; // try to keep execution in EU (helps Binance)
 
 type Bar = { t: number; o: number; h: number; l: number; c: number };
 
@@ -18,8 +19,8 @@ function normTimeframe(tf: any): string {
 
 function clampLimit(x: any): number {
   const n = Number(x);
-  const lim = Number.isFinite(n) ? n : 500;
-  return Math.max(50, Math.min(1500, Math.trunc(lim)));
+  const lim = Number.isFinite(n) ? n : 200;
+  return Math.max(10, Math.min(1500, Math.trunc(lim)));
 }
 
 function intervalToBinance(tf: string): string {
@@ -29,6 +30,37 @@ function intervalToBinance(tf: string): string {
     "1d":"1d","3d":"3d","1w":"1w","1M":"1M"
   };
   return map[tf] || "1h";
+}
+
+function parseSymbol(symbol: string): { base: string; quote: string } {
+  const s = symbol.toUpperCase().replace(/[-/]/g, "");
+  const quotes = ["USDT","USDC","BUSD","USD","EUR","BTC","ETH"];
+  for (const q of quotes.sort((a,b)=>b.length-a.length)) {
+    if (s.endsWith(q) && s.length > q.length) return { base: s.slice(0, -q.length), quote: q };
+  }
+  return { base: s, quote: "USDT" };
+}
+
+function tfToCryptoCompare(tf: string): { endpoint: "histominute"|"histohour"|"histoday"; aggregate: number } {
+  const s = (tf || "").trim().toLowerCase();
+
+  // minutes
+  let m = s.match(/^(\d+)\s*m$/);
+  if (m) return { endpoint: "histominute", aggregate: Math.max(1, Math.min(1440, parseInt(m[1], 10))) };
+
+  // hours
+  m = s.match(/^(\d+)\s*h$/);
+  if (m) return { endpoint: "histohour", aggregate: Math.max(1, Math.min(168, parseInt(m[1], 10))) };
+
+  // days
+  m = s.match(/^(\d+)\s*d$/);
+  if (m) return { endpoint: "histoday", aggregate: Math.max(1, Math.min(365, parseInt(m[1], 10))) };
+
+  // week/month fallback
+  if (s === "1w") return { endpoint: "histoday", aggregate: 7 };
+  if (s === "1m" || s === "1mo" || s === "1month") return { endpoint: "histoday", aggregate: 30 };
+
+  return { endpoint: "histohour", aggregate: 1 };
 }
 
 async function fetchBinance(symbol: string, timeframe: string, limit: number) {
@@ -45,7 +77,7 @@ async function fetchBinance(symbol: string, timeframe: string, limit: number) {
   if (!Array.isArray(raw) || raw.length === 0) throw new Error("Binance: invalid response");
 
   const bars: Bar[] = raw.map((k: any[]) => ({
-    t: toNum(k[0]),
+    t: toNum(k[0]), // ms already
     o: toNum(k[1]),
     h: toNum(k[2]),
     l: toNum(k[3]),
@@ -55,13 +87,67 @@ async function fetchBinance(symbol: string, timeframe: string, limit: number) {
   return { provider: "binance", bars };
 }
 
+async function fetchCryptoCompare(symbol: string, timeframe: string, limit: number) {
+  const { base, quote } = parseSymbol(symbol);
+  const { endpoint, aggregate } = tfToCryptoCompare(timeframe);
+
+  const url =
+    "https://min-api.cryptocompare.com/data/v2/" + endpoint +
+    "?fsym=" + encodeURIComponent(base) +
+    "&tsym=" + encodeURIComponent(quote) +
+    "&limit=" + encodeURIComponent(String(limit)) +
+    "&aggregate=" + encodeURIComponent(String(aggregate));
+
+  const headers: Record<string, string> = {};
+  const key = process.env.CRYPTOCOMPARE_API_KEY || "";
+  if (key) headers["authorization"] = "Apikey " + key;
+
+  const r = await fetch(url, { cache: "no-store", headers });
+  if (!r.ok) throw new Error(`CryptoCompare ${r.status}`);
+
+  const j = await r.json();
+  const arr = j?.Data?.Data;
+  if (!Array.isArray(arr) || arr.length === 0) throw new Error("CryptoCompare: invalid response");
+
+  const bars: Bar[] = arr.map((b: any) => ({
+    t: toNum(b.time) * 1000, // seconds -> ms
+    o: toNum(b.open),
+    h: toNum(b.high),
+    l: toNum(b.low),
+    c: toNum(b.close),
+  }));
+
+  return { provider: "cryptocompare", bars };
+}
+
+async function getBars(symbol: string, timeframe: string, limit: number) {
+  try {
+    return await fetchBinance(symbol, timeframe, limit);
+  } catch (e: any) {
+    // Binance 451 is common on Vercel US regions -> fallback
+    return await fetchCryptoCompare(symbol, timeframe, limit);
+  }
+}
+
+function parseBodyLoose(raw: string): any {
+  const s = (raw ?? "").trim();
+  if (!s) return {};
+  try { return JSON.parse(s); } catch {}
+  // urlencoded fallback: "symbol=...&timeframe=...&limit=..."
+  if (s.includes("=") && s.includes("&")) {
+    const sp = new URLSearchParams(s);
+    return { symbol: sp.get("symbol"), timeframe: sp.get("timeframe"), limit: sp.get("limit") };
+  }
+  return {};
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = normSymbol(url.searchParams.get("symbol"));
     const timeframe = normTimeframe(url.searchParams.get("timeframe"));
     const limit = clampLimit(url.searchParams.get("limit"));
-    const out = await fetchBinance(symbol, timeframe, limit);
+    const out = await getBars(symbol, timeframe, limit);
     return Response.json(out);
   } catch (e: any) {
     return Response.json({ error: e?.message || "Unknown error" }, { status: 500 });
@@ -71,34 +157,11 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const raw = await req.text();
-    if (!raw || !raw.trim()) {
-      return Response.json({ error: "Missing JSON body" }, { status: 400 });
-    }
-
-    let body: any = null;
-
-    // 1) normal JSON
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      // 2) fallback: urlencoded "symbol=...&timeframe=...&limit=..."
-      if (raw.includes("=") && raw.includes("&")) {
-        const sp = new URLSearchParams(raw);
-        body = {
-          symbol: sp.get("symbol"),
-          timeframe: sp.get("timeframe"),
-          limit: sp.get("limit"),
-        };
-      } else {
-        return Response.json({ error: "Invalid JSON body", received: raw.slice(0, 200) }, { status: 400 });
-      }
-    }
-
+    const body = parseBodyLoose(raw);
     const symbol = normSymbol(body?.symbol);
     const timeframe = normTimeframe(body?.timeframe);
     const limit = clampLimit(body?.limit);
-
-    const out = await fetchBinance(symbol, timeframe, limit);
+    const out = await getBars(symbol, timeframe, limit);
     return Response.json(out);
   } catch (e: any) {
     return Response.json({ error: e?.message || "Unknown error" }, { status: 500 });
