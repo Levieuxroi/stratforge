@@ -1,4 +1,4 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 import Stripe from "stripe";
 import { stripe } from "../../../../lib/stripe";
@@ -10,6 +10,24 @@ function planFromPrice(priceId: string): "pro" | "elite" | "free" {
   return "free";
 }
 
+// Idempotence: if Stripe retries, we do not process twice
+async function recordEventOnce(event: Stripe.Event) {
+  const payload = event as any;
+  const { error } = await supabaseAdmin.from("stripe_events").insert({
+    event_id: event.id,
+    type: event.type,
+    livemode: (payload?.livemode ?? null) as any,
+    payload
+  });
+
+  if (!error) return { duplicate: false };
+
+  const code = (error as any)?.code;
+  if (code === "23505") return { duplicate: true }; // unique violation
+
+  throw new Error("Supabase stripe_events insert error: " + error.message);
+}
+
 async function upsertSubscriptionAndPlan(sub: Stripe.Subscription, fallbackUserId?: string) {
   const stripeCustomerId = String((sub as any).customer);
   const stripeSubId = String((sub as any).id);
@@ -18,14 +36,11 @@ async function upsertSubscriptionAndPlan(sub: Stripe.Subscription, fallbackUserI
   const cancelAtPeriodEnd = !!(sub as any).cancel_at_period_end;
 
   const currentPeriodEndUnix = (sub as any).current_period_end as number | undefined;
-  const currentPeriodEnd = currentPeriodEndUnix
-    ? new Date(currentPeriodEndUnix * 1000).toISOString()
-    : null;
+  const currentPeriodEnd = currentPeriodEndUnix ? new Date(currentPeriodEndUnix * 1000).toISOString() : null;
 
   const priceId = String((sub as any).items?.data?.[0]?.price?.id || "");
   const plan = ((sub as any).metadata?.plan as string) || planFromPrice(priceId);
 
-  // user_id depuis metadata => sinon fallback => sinon lookup via stripe_customer_id
   let userId = String(((sub as any).metadata?.user_id as string) || "") || (fallbackUserId || "");
 
   if (!userId) {
@@ -43,7 +58,6 @@ async function upsertSubscriptionAndPlan(sub: Stripe.Subscription, fallbackUserI
     throw new Error("No userId found for subscription (metadata.user_id missing and no profile match)");
   }
 
-  // Upsert subscription (IMPORTANT: vérifier error)
   const { error: sErr } = await supabaseAdmin
     .from("subscriptions")
     .upsert(
@@ -63,11 +77,10 @@ async function upsertSubscriptionAndPlan(sub: Stripe.Subscription, fallbackUserI
 
   if (sErr) throw new Error("Supabase subscriptions upsert error: " + sErr.message);
 
-  // Update plan in profiles
   const isActive = status === "active" || status === "trialing";
   const { error: uErr } = await supabaseAdmin
     .from("profiles")
-    .update({ plan: isActive ? plan : "free", updated_at: new Date().toISOString() })
+    .update({ plan: isActive ? (plan as any) : "free", updated_at: new Date().toISOString() })
     .eq("id", userId);
 
   if (uErr) throw new Error("Supabase profiles update error: " + uErr.message);
@@ -91,14 +104,17 @@ export async function POST(req: Request) {
   }
 
   try {
-    // 1) customer.subscription.* (le cas principal)
+    const rec = await recordEventOnce(event);
+    if (rec.duplicate) {
+      return Response.json({ received: true, duplicate: true });
+    }
+
     if (event.type.startsWith("customer.subscription.")) {
       const sub = event.data.object as Stripe.Subscription;
       await upsertSubscriptionAndPlan(sub);
       return Response.json({ received: true });
     }
 
-    // 2) checkout.session.completed (fallback robuste)
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
 
@@ -113,10 +129,8 @@ export async function POST(req: Request) {
       return Response.json({ received: true });
     }
 
-    // Autres events: ok
     return Response.json({ received: true });
   } catch (e: any) {
-    // IMPORTANT: on renvoie 500 pour voir l’erreur dans Stripe Webhook event response
     return Response.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }
