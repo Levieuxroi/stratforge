@@ -1,257 +1,217 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabaseBrowser } from "../../lib/supabase/browser";
 
-type Status = {
-  ok: boolean;
-  plan: "free" | "pro" | "elite";
-  forward: {
-    enabled: boolean;
-    schedule: string;
-    interval_minutes: number;
-    strategy_id: string | null;
-    last_run_at: string | null;
-    last_error: string | null;
-    updated_at: string | null;
-  };
-  error?: string;
+type Strategy = {
+  id: string;
+  name: string;
+  symbol: string;
+  timeframe: string;
 };
 
-type StrategyRow = { id: string; name: string; symbol: string; timeframe: string };
+type Status = {
+  enabled: boolean;
+  schedule: string | null;
+  intervalMinutes: number | null;
+  lastRunAt: string | null;
+  lastError: string | null;
+  strategyId: string | null;
+};
+
+async function safeReadJson(res: Response) {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+}
 
 export default function ForwardClient() {
+  const supabase = useMemo(() => supabaseBrowser, []);
   const [loading, setLoading] = useState(true);
-  const [plan, setPlan] = useState<"free" | "pro" | "elite">("free");
+  const [saving, setSaving] = useState(false);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [status, setStatus] = useState<Status | null>(null);
   const [enabled, setEnabled] = useState(false);
-  const [schedule, setSchedule] = useState("");
-  const [intervalMinutes, setIntervalMinutes] = useState<number>(5);
+  const [schedule, setSchedule] = useState<string>("cron");
+  const [intervalMinutes, setIntervalMinutes] = useState<number>(15);
   const [strategyId, setStrategyId] = useState<string>("");
-  const [lastRunAt, setLastRunAt] = useState<string | null>(null);
-  const [lastError, setLastError] = useState<string | null>(null);
-
-  const [strategies, setStrategies] = useState<StrategyRow[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
   async function loadStrategies() {
-    const { data } = await supabase.auth.getSession();
-    const uid = data.session?.user?.id;
-    if (!uid) return;
-
-    const { data: list, error } = await supabase
+    const { data, error } = await supabase
       .from("strategies")
       .select("id,name,symbol,timeframe")
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .order("created_at", { ascending: false });
 
-    if (!error && list) {
-      setStrategies(list as any);
-    }
+    if (error) throw error;
+    setStrategies((data || []) as any);
   }
 
-  async function callStatus() {
-    setErr(null);
-    setMsg(null);
-    setLoading(true);
-
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) { window.location.href = "/login"; return; }
+  async function loadStatus() {
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess.session?.access_token;
 
     const r = await fetch("/api/forward/status", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${token}` }
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({})
     });
 
-    const j = (await r.json()) as Status;
+    const j = await safeReadJson(r);
 
     if (!r.ok) {
-      setErr(j?.error || "Status failed");
-      setLoading(false);
-      return;
+      const errMsg = (j && (j.error || j.message)) ? (j.error || j.message) : `HTTP ${r.status}`;
+      throw new Error(errMsg);
     }
 
-    setPlan(j.plan);
-    setEnabled(!!j.forward?.enabled);
-    setSchedule(j.forward?.schedule || "");
-    setIntervalMinutes(Number(j.forward?.interval_minutes || 5));
-    setStrategyId(j.forward?.strategy_id || "");
-    setLastRunAt(j.forward?.last_run_at || null);
-    setLastError(j.forward?.last_error || null);
+    const s = (j?.status || j) as Status;
 
-    setLoading(false);
+    setStatus(s);
+    setEnabled(!!s.enabled);
+    setSchedule((s.schedule || "cron") as any);
+    setIntervalMinutes(s.intervalMinutes ?? 15);
+    setStrategyId(s.strategyId || "");
   }
 
-  async function save(nextEnabled: boolean) {
-    setErr(null);
+  async function save() {
+    setSaving(true);
     setMsg(null);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
 
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) { window.location.href = "/login"; return; }
+      const r = await fetch("/api/forward/toggle", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          enabled,
+          schedule,
+          intervalMinutes,
+          strategyId: strategyId || null
+        })
+      });
 
-    const r = await fetch("/api/forward/toggle", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        enable: nextEnabled,
-        schedule,
-        interval_minutes: intervalMinutes,
-        strategy_id: strategyId || null
-      })
-    });
+      const j = await safeReadJson(r);
 
-    const j = await r.json();
-    if (!r.ok) {
-      setErr(j?.error || "Save failed");
-      return;
+      if (!r.ok) {
+        const errMsg = (j && (j.error || j.message)) ? (j.error || j.message) : `HTTP ${r.status}`;
+        throw new Error(errMsg);
+      }
+
+      setMsg("Enregistr\u00E9 OK");
+await loadStatus();
+    } catch (e: any) {
+      setMsg("Erreur: " + (e?.message || String(e)));
+    } finally {
+      setSaving(false);
     }
-
-    setEnabled(!!j.enabled);
-    setMsg(nextEnabled ? "Forward testing activé." : "Forward testing désactivé.");
   }
 
   useEffect(() => {
-    loadStrategies();
-    callStatus();
+    (async () => {
+      setLoading(true);
+      setMsg(null);
+      try {
+        await loadStrategies();
+        await loadStatus();
+      } catch (e: any) {
+        setMsg("Erreur: " + (e?.message || String(e)));
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canUse = plan === "pro" || plan === "elite";
-  const selected = useMemo(() => strategies.find(s => s.id === strategyId) || null, [strategies, strategyId]);
+  if (loading) return <div className="p-6">Chargement?f?'?f?,?s</div>;
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="mx-auto max-w-3xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Forward testing</h1>
-          <div className="flex gap-2">
-            <a className="rounded-md border px-4 py-2" href="/dashboard">Dashboard</a>
-            <a className="rounded-md border px-4 py-2" href="/pricing">Upgrade</a>
-          </div>
-        </div>
-
-        <div className="rounded-md border p-4">
-          <div className="text-sm text-gray-600">Plan</div>
-          <div className="text-lg font-semibold">{plan.toUpperCase()}</div>
-          {lastRunAt && (
-            <div className="mt-2 text-xs text-gray-600">
-              Dernier run: {new Date(lastRunAt).toLocaleString()}
-            </div>
-          )}
-          {lastError && (
-            <div className="mt-2 text-xs text-red-600">
-              Dernière erreur: {lastError}
-            </div>
-          )}
-        </div>
-
-        {loading && <div className="rounded-md border p-4">Chargement…</div>}
-        {err && <div className="rounded-md border p-4 text-red-600 text-sm">{err}</div>}
-        {msg && <div className="rounded-md border p-4 text-green-700 text-sm">{msg}</div>}
-
-        {!loading && (
-          <div className="rounded-md border p-4 space-y-3">
-            <div className="text-sm text-gray-600">
-              Le cron Vercel appelle /api/cron. Ici tu choisis la stratégie et l'intervalle souhaité.
-            </div>
-
-            <label className="block text-sm">
-              Stratégie à exécuter
-              <select
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={strategyId}
-                onChange={(e) => setStrategyId(e.target.value)}
-                disabled={!canUse}
-              >
-                <option value="">(Choisir une stratégie…)</option>
-                {strategies.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} — {s.symbol} — {s.timeframe}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selected && (
-              <div className="text-xs text-gray-600">
-                Sélection: <b>{selected.name}</b> ({selected.symbol}, {selected.timeframe})
-              </div>
-            )}
-
-            <label className="block text-sm">
-              Interval (minutes)
-              <input
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                type="number"
-                min={1}
-                max={1440}
-                value={intervalMinutes}
-                onChange={(e) => setIntervalMinutes(Number(e.target.value))}
-                disabled={!canUse}
-              />
-            </label>
-
-            <label className="block text-sm">
-              Schedule (optionnel, stocké en DB)
-              <input
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                placeholder='ex: */5 * * * *'
-                value={schedule}
-                onChange={(e) => setSchedule(e.target.value)}
-                disabled={!canUse}
-              />
-            </label>
-
-            {!canUse && (
-              <div className="text-sm text-red-600">
-                Upgrade requis (Pro/Elite) pour activer le forward testing.
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                className="rounded-md bg-black px-4 py-2 text-white disabled:opacity-50"
-                onClick={() => save(true)}
-                disabled={!canUse || enabled || !strategyId}
-                type="button"
-              >
-                Activer
-              </button>
-
-              <button
-                className="rounded-md border px-4 py-2 disabled:opacity-50"
-                onClick={() => save(false)}
-                disabled={!canUse || !enabled}
-                type="button"
-              >
-                Désactiver
-              </button>
-
-              <button
-                className="rounded-md border px-4 py-2"
-                onClick={() => { loadStrategies(); callStatus(); }}
-                type="button"
-              >
-                Rafraîchir
-              </button>
-
-              <a className="rounded-md border px-4 py-2" href="/signals">
-                Voir signaux
-              </a>
-            </div>
-
-            {!strategyId && (
-              <div className="text-xs text-gray-600">
-                Note: tu dois sélectionner une stratégie pour activer.
-              </div>
-            )}
-          </div>
-        )}
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Forward</h1>
+        {msg ? <div className="text-sm opacity-80">{msg}</div> : null}
       </div>
-    </main>
+
+      <div className="rounded-lg border p-4 space-y-3">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            disabled={saving}
+          />
+          <span>Activer Forward</span>
+        </label>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <div className="text-sm mb-1">Mode</div>
+            <select
+              className="border rounded-md px-3 py-2 w-full"
+              value={schedule}
+              onChange={(e) => setSchedule(e.target.value)}
+              disabled={saving}
+            >
+              <option value="cron">Cron</option>
+              <option value="interval">Interval</option>
+            </select>
+          </div>
+
+          <div>
+            <div className="text-sm mb-1">Interval (minutes)</div>
+            <input
+              className="border rounded-md px-3 py-2 w-full"
+              type="number"
+              min={1}
+              value={intervalMinutes}
+              onChange={(e) => setIntervalMinutes(Number(e.target.value || 0))}
+              disabled={saving || schedule !== "interval"}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-sm mb-1">Strat?f?'????Tgie</div>
+          <select
+            className="border rounded-md px-3 py-2 w-full"
+            value={strategyId}
+            onChange={(e) => setStrategyId(e.target.value)}
+            disabled={saving}
+          >
+            <option value="">?f?'?f?,?s?f??s s?f?'????Tlectionner ?f?'?f?,?s?f??s</option>
+            {strategies.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.symbol} / {s.timeframe})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          className="rounded-md bg-black text-white px-4 py-2 text-sm disabled:opacity-60"
+          onClick={save}
+          disabled={saving}
+        >
+          {saving ? "Sauvegarde..." : "Sauvegarder"}
+        </button>
+
+        {status ? (
+          <div className="text-xs opacity-80 pt-2">
+            <div>Dernier run: {status.lastRunAt || "-"}</div>
+            <div>Derni?f?'????Tre erreur: {status.lastError || "-"}</div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }

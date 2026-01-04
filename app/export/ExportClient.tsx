@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -179,9 +179,9 @@ export default function ExportClient() {
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      alert("Copié ✅");
+      alert("Copi? ?o.");
     } catch {
-      alert("Impossible de copier automatiquement. Sélectionne et copie manuellement.");
+      alert("Impossible de copier automatiquement. S?lectionne et copie manuellement.");
     }
   }
 

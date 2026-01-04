@@ -1,4 +1,4 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 import { stripe } from "../../../../lib/stripe";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
@@ -16,18 +16,36 @@ export async function POST(req: Request) {
 
     const { data: prof, error: pErr } = await supabaseAdmin
       .from("profiles")
-      .select("stripe_customer_id")
+      .select("id,email,stripe_customer_id,plan")
       .eq("id", user.id)
       .maybeSingle();
 
     if (pErr) return Response.json({ error: pErr.message }, { status: 500 });
-    if (!prof?.stripe_customer_id) return Response.json({ error: "No stripe customer" }, { status: 400 });
+
+    let customerId = prof?.stripe_customer_id || null;
+
+    // ?o. FIX: si pas de customer, on le cr?e (comme checkout)
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email || prof?.email || undefined,
+        metadata: { user_id: user.id },
+      });
+      customerId = customer.id;
+
+      await supabaseAdmin.from("profiles").upsert({
+        id: user.id,
+        email: user.email,
+        stripe_customer_id: customerId,
+        plan: prof?.plan || "free",
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     const origin = new URL(req.url).origin;
 
     const portal = await stripe.billingPortal.sessions.create({
-      customer: prof.stripe_customer_id,
-      return_url: `${origin}/account`
+      customer: customerId,
+      return_url: `${origin}/account`,
     });
 
     return Response.json({ url: portal.url });

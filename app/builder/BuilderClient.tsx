@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -40,10 +40,15 @@ export default function BuilderClient() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  function goLoginWithNext() {
+    const next = id ? `/builder?id=${encodeURIComponent(id)}` : "/builder";
+    router.push("/login?next=" + encodeURIComponent(next));
+  }
+
   async function requireSession() {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
-      router.push("/login");
+      goLoginWithNext();
       return null;
     }
     return data.session;
@@ -55,7 +60,10 @@ export default function BuilderClient() {
     setMsg(null);
 
     const session = await requireSession();
-    if (!session) return;
+    if (!session) {
+      setBusy(false);
+      return;
+    }
 
     if (!id) {
       setBusy(false);
@@ -93,7 +101,7 @@ export default function BuilderClient() {
     try {
       def = JSON.parse(jsonText);
     } catch {
-      setErr("JSON invalide: vérifie la syntaxe (virgules, guillemets, etc.).");
+      setErr("JSON invalide: v?rifie la syntaxe (virgules, guillemets, etc.).");
       return;
     }
 
@@ -108,7 +116,7 @@ export default function BuilderClient() {
         .eq("id", id);
 
       if (error) setErr(error.message);
-      else setMsg("Stratégie mise à jour ✅");
+      else setMsg("Strat?gie mise ? jour ?o.");
       setBusy(false);
       return;
     }
@@ -123,7 +131,7 @@ export default function BuilderClient() {
 
     if (error) setErr(error.message);
     else {
-      setMsg("Stratégie sauvegardée ✅");
+      setMsg("Strat?gie sauvegard?e ?o.");
       router.push("/dashboard");
     }
 
@@ -141,7 +149,7 @@ export default function BuilderClient() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Strategy Builder (V1)</h1>
-            <div className="text-sm text-gray-600">{id ? "Édition" : "Nouvelle stratégie"}</div>
+            <div className="text-sm text-gray-600">{id ? "??dition" : "Nouvelle strat?gie"}</div>
           </div>
           <div className="flex gap-2">
             <button disabled={busy} className="rounded-md bg-black px-4 py-2 text-white" onClick={save}>
@@ -184,7 +192,7 @@ export default function BuilderClient() {
                 onChange={(e) => setJsonText(e.target.value)}
               />
               <div className="text-xs text-gray-600">
-                V1: on sauvegarde un JSON. Prochaine étape: éditeur “blocs” qui génère ce JSON automatiquement.
+                V1: on sauvegarde un JSON. Prochaine ?tape: ?diteur ??oblocs??? qui g?n?re ce JSON automatiquement.
               </div>
             </div>
           </div>

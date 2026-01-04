@@ -1,4 +1,4 @@
-﻿import { supabaseAdmin } from "./supabaseAdmin";
+import { supabaseAdmin } from "./supabaseAdmin";
 
 type StrategyRow = {
   id: string;

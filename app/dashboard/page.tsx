@@ -1,5 +1,7 @@
 "use client";
 
+
+import { requireAuth, requirePlan } from "../../lib/pageGuard";
 import DashboardHeader from "../_components/DashboardHeader";
 
 import { useEffect, useState } from "react";
@@ -21,37 +23,55 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  async function load() {
+  async function load(alive?: { current: boolean }) {
     setBusy(true);
     setErr(null);
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const session = sessionData.session;
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
 
-    if (!session) {
-      router.push("/login");
-      return;
+      const session = sessionData.session;
+
+      if (!session) {
+// IMPORTANT: on passe next pour revenir ici après login
+        router.replace("/login?next=" + encodeURIComponent("/dashboard"));
+        return;
+      }
+
+      if (alive && !alive.current) return;
+
+      setEmail(session.user.email ?? "");
+
+      const { data, error } = await supabase
+        .from("strategies")
+        .select("id,name,symbol,timeframe,created_at")
+        .order("created_at", { ascending: false });
+
+      if (alive && !alive.current) return;
+
+      if (error) setErr(error.message);
+      setRows((data ?? []) as StrategyRow[]);
+    } catch (e: any) {
+      if (alive && !alive.current) return;
+      setErr(e?.message ?? "Erreur inconnue");
+    } finally {
+      if (alive && !alive.current) return;
+      setBusy(false);
     }
-
-    setEmail(session.user.email ?? "");
-
-    const { data, error } = await supabase
-      .from("strategies")
-      .select("id,name,symbol,timeframe,created_at")
-      .order("created_at", { ascending: false });
-
-    if (error) setErr(error.message);
-    setRows((data ?? []) as StrategyRow[]);
-    setBusy(false);
   }
 
   async function logout() {
     await supabase.auth.signOut();
-    router.push("/login");
+    router.replace("/login");
   }
 
   useEffect(() => {
-    load();
+    const alive = { current: true };
+    load(alive);
+    return () => {
+      alive.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

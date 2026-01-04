@@ -1,0 +1,30 @@
+[35mapp/api/backtest/route.ts[m[36m:[m[32m131[m[36m:[m    [1;31mencodeURIComponent[m(symbol) +
+[35mapp/api/backtest/route.ts[m[36m:[m[32m133[m[36m:[m    [1;31mencodeURIComponent[m(interval) +
+[35mapp/api/backtest/route.ts[m[36m:[m[32m135[m[36m:[m    [1;31mencodeURIComponent[m(String(barsLimit));
+[35mapp/api/backtest/route.ts[m[36m:[m[32m172[m[36m:[m    [1;31mencodeURIComponent[m(base) +
+[35mapp/api/backtest/route.ts[m[36m:[m[32m174[m[36m:[m    [1;31mencodeURIComponent[m(quote) +
+[35mapp/api/backtest/route.ts[m[36m:[m[32m176[m[36m:[m    [1;31mencodeURIComponent[m(String(barsLimit)) +
+[35mapp/api/backtest/route.ts[m[36m:[m[32m178[m[36m:[m    [1;31mencodeURIComponent[m(String(aggregate));
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m69[m[36m:[m    "https://api.binance.com/api/v3/klines?symbol=" + [1;31mencodeURIComponent[m(symbol) +
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m70[m[36m:[m    "&interval=" + [1;31mencodeURIComponent[m(interval) +
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m71[m[36m:[m    "&limit=" + [1;31mencodeURIComponent[m(String(limit));
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m96[m[36m:[m    "?fsym=" + [1;31mencodeURIComponent[m(base) +
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m97[m[36m:[m    "&tsym=" + [1;31mencodeURIComponent[m(quote) +
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m98[m[36m:[m    "&limit=" + [1;31mencodeURIComponent[m(String(limit)) +
+[35mapp/api/market/bars/route.ts[m[36m:[m[32m99[m[36m:[m    "&aggregate=" + [1;31mencodeURIComponent[m(String(aggregate));
+[35mlib/forwardRunner.ts[m[36m:[m[32m30[m[36m:[m    `https://data-api.binance.vision/fapi/v1/klines?symbol=${[1;31mencodeURIComponent[m(sym)}&interval=${[1;31mencodeURIComponent[m(intv)}&limit=${limit}`,
+[35mlib/forwardRunner.ts[m[36m:[m[32m31[m[36m:[m    `https://fapi.binance.com/fapi/v1/klines?symbol=${[1;31mencodeURIComponent[m(sym)}&interval=${[1;31mencodeURIComponent[m(intv)}&limit=${limit}`,
+[35mlib/forwardRunner.ts[m[36m:[m[32m33[m[36m:[m    `https://data-api.binance.vision/api/v3/klines?symbol=${[1;31mencodeURIComponent[m(sym)}&interval=${[1;31mencodeURIComponent[m(intv)}&limit=${limit}`,
+[35mlib/forwardRunner.ts[m[36m:[m[32m34[m[36m:[m    `https://api.binance.com/api/v3/klines?symbol=${[1;31mencodeURIComponent[m(sym)}&interval=${[1;31mencodeURIComponent[m(intv)}&limit=${limit}`
+[35msf_A2_fix_mojibake.ps1[m[36m:[m[32m13[m[36m:[m  $[1;31mlatin1[m = [System.Text.Encoding]::GetEncoding(28591)  # ISO-8859-1
+[35msf_A2_fix_mojibake.ps1[m[36m:[m[32m15[m[36m:[m  return $utf8.GetString($[1;31mlatin1[m.GetBytes($text))
+[35msf_fix_market_bars.ps1[m[36m:[m[32m64[m[36m:[m    "https://api.binance.com/api/v3/klines?symbol=" + [1;31mencodeURIComponent[m(symbol) +
+[35msf_fix_market_bars.ps1[m[36m:[m[32m65[m[36m:[m    "&interval=" + [1;31mencodeURIComponent[m(interval) +
+[35msf_fix_market_bars.ps1[m[36m:[m[32m66[m[36m:[m    "&limit=" + [1;31mencodeURIComponent[m(String(limit));
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m89[m[36m:[m    "https://api.binance.com/api/v3/klines?symbol=" + [1;31mencodeURIComponent[m(symbol) +
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m90[m[36m:[m    "&interval=" + [1;31mencodeURIComponent[m(interval) +
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m91[m[36m:[m    "&limit=" + [1;31mencodeURIComponent[m(String(limit));
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m116[m[36m:[m    "?fsym=" + [1;31mencodeURIComponent[m(base) +
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m117[m[36m:[m    "&tsym=" + [1;31mencodeURIComponent[m(quote) +
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m118[m[36m:[m    "&limit=" + [1;31mencodeURIComponent[m(String(limit)) +
+[35msf_fix_market_bars_fallback.ps1[m[36m:[m[32m119[m[36m:[m    "&aggregate=" + [1;31mencodeURIComponent[m(String(aggregate));

@@ -1,9 +1,13 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
+import { requireMinPlan } from "../../../../lib/guards";
 
 export async function POST(req: Request) {
-  try {
+  
+  const gate = await requireMinPlan(req, "pro");
+  if (gate instanceof Response) return gate;
+try {
     const auth = req.headers.get("authorization") || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!token) return Response.json({ error: "Missing auth token" }, { status: 401 });

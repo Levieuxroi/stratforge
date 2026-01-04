@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
@@ -77,16 +77,16 @@ export default function SignalsClient() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             className="w-full md:w-96 rounded-md border px-3 py-2 text-sm"
-            placeholder="Search symbol / action / timeframe / reason…"
+            placeholder="********"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <button className="rounded-md border px-4 py-2" onClick={load} type="button">
-            Rafraîchir
+            Rafra?chir
           </button>
         </div>
 
-        {loading && <div className="rounded-md border p-4">Chargement…</div>}
+        {loading && <div className="rounded-md border p-4">Chargement???</div>}
         {err && <div className="rounded-md border p-4 text-red-600 text-sm">{err}</div>}
 
         {!loading && !err && (
@@ -102,7 +102,7 @@ export default function SignalsClient() {
 
             {filtered.length === 0 ? (
               <div className="p-4 text-sm text-gray-600">
-                Aucun signal pour l’instant (normal si rien n’a encore été généré).
+                Aucun signal pour l??Tinstant (normal si rien n??Ta encore ?t? g?n?r?).
               </div>
             ) : (
               <div className="divide-y">

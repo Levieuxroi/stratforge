@@ -1,10 +1,14 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 import { runForwardForUser } from "../../../../lib/forwardRunner";
+import { requireMinPlan } from "../../../../lib/guards";
 
 export async function POST(req: Request) {
-  try {
+  
+  const gate = await requireMinPlan(req, "pro");
+  if (gate instanceof Response) return gate;
+try {
     const isCron = (req.headers.get("x-vercel-cron") === "1");
 
     // Allow:

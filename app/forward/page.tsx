@@ -1,12 +1,7 @@
-﻿import { Suspense } from "react";
 import ForwardClient from "./ForwardClient";
+import { requirePlan } from "../../lib/pageGuard";
 
-export const dynamic = "force-dynamic";
-
-export default function ForwardPage() {
-  return (
-    <Suspense fallback={<main className="min-h-screen p-8">Loading…</main>}>
-      <ForwardClient />
-    </Suspense>
-  );
+export default async function Page() {
+  await requirePlan("pro", "/forward");
+  return <ForwardClient />;
 }

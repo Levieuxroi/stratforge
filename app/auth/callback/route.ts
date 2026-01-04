@@ -2,60 +2,47 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-async function supabaseServer() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anon) throw new Error("Missing Supabase env (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY)");
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const next = url.searchParams.get("next") ?? "/dashboard";
+  const redirectTo = new URL(next, url.origin);
 
   const cookieStore = await cookies();
 
-  return createServerClient(url, anon, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
-        } catch {
-          // ignore in environments where cookies are read-only
-        }
-      },
-    },
-  });
-}
+  // On prépare la réponse tout de suite, pour pouvoir y écrire les cookies Supabase
+  const response = NextResponse.redirect(redirectTo);
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const origin = url.origin;
-
-  const next = url.searchParams.get("next") || "/dashboard";
-  const code = url.searchParams.get("code");
-  const token_hash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type"); // signup | recovery | invite | email_change
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          } catch {}
+        },
+      },
+    }
+  );
 
   try {
-    const supabase = await supabaseServer();
-
-    // 1) PKCE flow (most common): ?code=...
     if (code) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error) return NextResponse.redirect(origin + next);
-      return NextResponse.redirect(origin + "/login?error=confirm_code");
+      if (error) throw error;
+      return response;
     }
 
-    // 2) token_hash flow (sometimes used in templates): ?token_hash=...&type=signup
-    if (token_hash && type) {
-      const { error } = await supabase.auth.verifyOtp({ type: type as any, token_hash });
-      if (!error) return NextResponse.redirect(origin + next);
-      return NextResponse.redirect(origin + "/login?error=confirm_token");
-    }
-
-    return NextResponse.redirect(origin + "/login?error=confirm_missing_params");
-  } catch {
-    return NextResponse.redirect(origin + "/login?error=confirm_exception");
+    return NextResponse.redirect(new URL("/login?error=missing_code", url.origin));
+  } catch (e: any) {
+    return NextResponse.redirect(
+      new URL(`/login?error=${encodeURIComponent(e?.message ?? "oauth_callback_failed")}`, url.origin)
+    );
   }
 }

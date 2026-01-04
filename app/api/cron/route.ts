@@ -1,4 +1,4 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
 import { supabaseAdmin } from "../../../lib/supabaseAdmin";
 import { runForwardForUser } from "../../../lib/forwardRunner";

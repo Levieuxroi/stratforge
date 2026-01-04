@@ -1,5 +1,6 @@
-﻿export const runtime = "nodejs";
+export const runtime = "nodejs";
 
+import { requireMinPlan } from "../../../lib/guards";
 type Bar = {
   t: number; // timestamp ms
   o: number;
@@ -200,7 +201,10 @@ async function fetchBarsFromCryptoCompare(symbol: string, timeframe: string, bar
 }
 
 export async function POST(req: Request) {
-  try {
+  
+  const gate = await requireMinPlan(req, "pro");
+  if (gate instanceof Response) return gate;
+try {
     const body = await req.json();
 
     const symbol = String(body.symbol || "BTCUSDT").toUpperCase().replace("-", "").replace("/", "");

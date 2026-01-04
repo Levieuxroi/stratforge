@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.env*.local
+# --- Stratforge local noise ---
+.sf_backups/
+*.bak
+*.bak.*
+*.ps1
+*.log
+# Next/Vercel
+.vercel/
+# OS/Editor
+Thumbs.db
+.editorconfig
